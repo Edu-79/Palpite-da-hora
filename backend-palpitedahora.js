@@ -60,15 +60,14 @@ async function gerarPalpites(homeId, awayId, leagueId) {
     }
 
     return palpites.slice(0, 4);
-
   } catch (err) {
-    console.error('Erro ao gerar palpite:', err.message);
+    console.error('Erro ao gerar palpite para times:', homeId, 'vs', awayId, '| Erro:', err.message);
     return ['Palpite indisponível'];
   }
 }
 
 app.get('/jogos', async (req, res) => {
-  const hoje = '2025-05-21'; // DATA FIXA PARA TESTE
+  const hoje = '2025-05-21'; // Testando com data fixa
 
   try {
     const response = await axios.get(`${API_URL}/fixtures`, {
@@ -76,11 +75,15 @@ app.get('/jogos', async (req, res) => {
       headers: { 'x-apisports-key': API_KEY }
     });
 
+    console.log(`Total de jogos encontrados em ${hoje}:`, response.data.response.length);
+
     const jogos = await Promise.all(
       response.data.response.map(async (jogo) => {
         const home = jogo.teams.home;
         const away = jogo.teams.away;
         const league = jogo.league;
+
+        console.log(`Processando: ${home.name} vs ${away.name} (${league.name})`);
 
         const palpites = await gerarPalpites(home.id, away.id, league.id);
 
