@@ -28,7 +28,6 @@ async function gerarPalpites(homeId, awayId, leagueId) {
 
     const palpites = [];
 
-    // Palpite 1: Vitória provável
     const homeWin = home.fixtures.wins.total || 0;
     const awayWin = away.fixtures.wins.total || 0;
 
@@ -40,7 +39,6 @@ async function gerarPalpites(homeId, awayId, leagueId) {
       palpites.push('Empate provável');
     }
 
-    // Palpite 2: Total de gols
     const avgGoalsHome = home.goals.for.total.total / (home.fixtures.played.total || 1);
     const avgGoalsAway = away.goals.for.total.total / (away.fixtures.played.total || 1);
     const mediaTotal = avgGoalsHome + avgGoalsAway;
@@ -51,19 +49,17 @@ async function gerarPalpites(homeId, awayId, leagueId) {
       palpites.push('Menos de 2.5 gols');
     }
 
-    // Palpite 3: Ambos marcam
     if (avgGoalsHome >= 1 && avgGoalsAway >= 1) {
       palpites.push('Ambas equipes marcam');
     }
 
-    // Palpite 4: Clean Sheet
     if (home.clean_sheet.total > away.clean_sheet.total) {
       palpites.push(`${home.team.name} não sofre gol`);
     } else if (away.clean_sheet.total > home.clean_sheet.total) {
       palpites.push(`${away.team.name} não sofre gol`);
     }
 
-    return palpites.slice(0, 4); // Limita a no máximo 4 palpites
+    return palpites.slice(0, 4);
 
   } catch (err) {
     console.error('Erro ao gerar palpite:', err.message);
@@ -72,7 +68,7 @@ async function gerarPalpites(homeId, awayId, leagueId) {
 }
 
 app.get('/jogos', async (req, res) => {
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = '2025-05-21'; // DATA FIXA PARA TESTE
 
   try {
     const response = await axios.get(`${API_URL}/fixtures`, {
