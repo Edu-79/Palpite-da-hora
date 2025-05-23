@@ -8,7 +8,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 
-const API_KEY = "acbb8110aa46345c241f0562f3a0e24d";
+const API_KEY = "92e0f4a7bea9a8f54c55e1353c9d53be";
 const BASE_URL = "https://v3.football.api-sports.io";
 
 async function gerarPalpites(homeId, awayId, leagueId) {
