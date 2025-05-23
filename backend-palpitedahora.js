@@ -1,4 +1,4 @@
-// BACKEND COMPLETO PARA "PALPITE DA HORA"
+// BACKEND PALPITE DA HORA COM ANÁLISE AVANÇADA
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
@@ -8,63 +8,106 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 
-const API_KEY = "92e0f4a7bea9a8f54c55e1353c9d53be";
-const API_URL = "https://v3.football.api-sports.io";
+const API_KEY = "acbb8110aa46345c241f0562f3a0e24d";
+const BASE_URL = "https://v3.football.api-sports.io";
+
+async function gerarPalpites(homeId, awayId, leagueId) {
+  try {
+    const [homeStats, awayStats] = await Promise.all([
+      axios.get(`${BASE_URL}/teams/statistics`, {
+        params: { team: homeId, league: leagueId, season: 2023 },
+        headers: { "x-apisports-key": API_KEY }
+      }),
+      axios.get(`${BASE_URL}/teams/statistics`, {
+        params: { team: awayId, league: leagueId, season: 2023 },
+        headers: { "x-apisports-key": API_KEY }
+      })
+    ]);
+
+    const casa = homeStats.data.response;
+    const fora = awayStats.data.response;
+
+    const palpites = [];
+
+    // Resultado provável
+    const winRateCasa = casa.fixtures.wins.total / (casa.fixtures.played.total || 1);
+    const winRateFora = fora.fixtures.wins.total / (fora.fixtures.played.total || 1);
+    const empateRate = casa.fixtures.draws.total + fora.fixtures.draws.total;
+
+    if (Math.abs(winRateCasa - winRateFora) < 0.1 && empateRate > casa.fixtures.played.total * 0.3) {
+      palpites.push("Empate provável");
+    } else if (winRateCasa > winRateFora) {
+      palpites.push("Vitória do mandante");
+    } else {
+      palpites.push("Vitória do visitante");
+    }
+
+    // Gols
+    const golsCasa = casa.goals.for.total.total / (casa.fixtures.played.total || 1);
+    const golsFora = fora.goals.for.total.total / (fora.fixtures.played.total || 1);
+    const mediaGols = (golsCasa + golsFora) / 2;
+    if (mediaGols >= 2.5) {
+      palpites.push("Mais de 2.5 gols");
+    } else {
+      palpites.push("Menos de 2.5 gols");
+    }
+
+    // Ambas marcam
+    const sofreCasa = casa.goals.against.total.total / casa.fixtures.played.total;
+    const sofreFora = fora.goals.against.total.total / fora.fixtures.played.total;
+    if (sofreCasa > 1 && sofreFora > 1) {
+      palpites.push("Ambas marcam");
+    }
+
+    // Escanteios e Cartões (simulados por enquanto)
+    const escanteios = casa.offsides?.total || 4 + fora.offsides?.total || 4;
+    const cartoes = (casa.cards.yellow.total || 2) + (fora.cards.yellow.total || 2);
+    if (escanteios >= 8) {
+      palpites.push("Mais de 8 escanteios");
+    }
+    if (cartoes >= 4) {
+      palpites.push("Jogo com muitos cartões");
+    }
+
+    return palpites.slice(0, 4);
+  } catch (err) {
+    console.error("Erro ao gerar palpites:", err.message);
+    return ["Palpite indisponível"];
+  }
+}
 
 app.get("/jogos", async (req, res) => {
+  const hoje = new Date().toISOString().split("T")[0];
   try {
-    const hoje = new Date().toISOString().slice(0, 10); // formato YYYY-MM-DD
-
-    const response = await axios.get(`${API_URL}/fixtures`, {
+    const response = await axios.get(`${BASE_URL}/fixtures`, {
       params: { date: hoje },
-      headers: {
-        "x-apisports-key": API_KEY,
-      },
+      headers: { "x-apisports-key": API_KEY }
     });
 
-    const jogosBrutos = response.data.response;
+    const jogos = await Promise.all(response.data.response.map(async jogo => {
+      const palpites = await gerarPalpites(
+        jogo.teams.home.id,
+        jogo.teams.away.id,
+        jogo.league.id
+      );
 
-    const jogosFormatados = jogosBrutos.map(jogo => {
       return {
         liga: jogo.league.name,
         ligaLogo: jogo.league.logo,
-        pais: jogo.league.country,
-        horario: jogo.fixture.date,
-        escudoCasa: jogo.teams.home.logo,
-        escudoFora: jogo.teams.away.logo,
         timeCasa: jogo.teams.home.name,
+        escudoCasa: jogo.teams.home.logo,
         timeFora: jogo.teams.away.name,
-        palpites: gerarPalpitesAleatorios()
+        escudoFora: jogo.teams.away.logo,
+        horario: new Date(jogo.fixture.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        palpites
       };
-    });
+    }));
 
-    res.json(jogosFormatados);
-
-  } catch (error) {
-    console.error("Erro ao buscar jogos:", error.message);
-    res.status(500).json({ erro: "Erro ao buscar jogos do dia." });
+    res.json(jogos);
+  } catch (err) {
+    console.error("Erro ao buscar jogos:", err.message);
+    res.status(500).json({ erro: "Erro ao buscar os jogos do dia" });
   }
 });
 
-function gerarPalpitesAleatorios() {
-  const opcoes = [
-    "Mais de 2.5 gols",
-    "Ambas marcam",
-    "Vitória do mandante",
-    "Vitória do visitante",
-    "Empate",
-    "Menos de 2.5 gols"
-  ];
-
-  // retorna 3 palpites aleatórios diferentes
-  const embaralhado = opcoes.sort(() => 0.5 - Math.random());
-  return embaralhado.slice(0, 3);
-}
-
-app.get("/", (req, res) => {
-  res.send("API do Palpite da Hora funcionando!");
-});
-
-app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
-});
+app.listen(PORT, () => console.log("Servidor rodando na porta " + PORT));
