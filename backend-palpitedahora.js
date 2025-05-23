@@ -1,4 +1,4 @@
-// BACKEND COM SOFASCORE E CORS LIBERADO PARA TREBEDIT
+// BACKEND COM SOFASCORE + LOG DE RESPOSTA PARA DEBUG
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
@@ -22,6 +22,9 @@ app.get("/jogos", async (req, res) => {
     const url = `https://api.sofascore.com/api/v1/sport/football/scheduled-events/${hoje}`;
 
     const resposta = await axios.get(url);
+
+    console.log("Resposta bruta da SofaScore:", resposta.data);
+
     const eventos = resposta.data.events || [];
 
     const jogos = eventos.slice(0, 10).map(evento => ({
@@ -38,6 +41,9 @@ app.get("/jogos", async (req, res) => {
     res.json(jogos);
   } catch (erro) {
     console.error("Erro ao buscar dados do SofaScore:", erro.message);
+    if (erro.response) {
+      console.error("Detalhes do erro:", erro.response.data);
+    }
     res.status(500).json({ erro: "Erro ao buscar jogos do SofaScore" });
   }
 });
