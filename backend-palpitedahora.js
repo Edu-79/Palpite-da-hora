@@ -1,4 +1,4 @@
-// BACKEND COM SOFASCORE - NÃO OFICIAL
+// BACKEND COM SOFASCORE E CORS LIBERADO PARA TREBEDIT
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
