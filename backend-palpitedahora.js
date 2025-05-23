@@ -1,93 +1,68 @@
-const express = require('express');
-const axios = require('axios');
-const cors = require('cors');
+// BACKEND COMPLETO PARA "PALPITE DA HORA"
+const express = require("express");
+const cors = require("cors");
+const axios = require("axios");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 
-const API_KEY = '92e0f4a7bea9a8f54c55e1353c9d53be';
-const API_URL = 'https://v3.football.api-sports.io';
+const API_KEY = "92e0f4a7bea9a8f54c55e1353c9d53be";
+const API_URL = "https://v3.football.api-sports.io";
 
-app.get('/jogos', async (req, res) => {
-  const hoje = new Date().toISOString().slice(0, 10);
-
+app.get("/jogos", async (req, res) => {
   try {
+    const hoje = new Date().toISOString().slice(0, 10); // formato YYYY-MM-DD
+
     const response = await axios.get(`${API_URL}/fixtures`, {
       params: { date: hoje },
-      headers: { 'x-apisports-key': API_KEY }
+      headers: {
+        "x-apisports-key": API_KEY,
+      },
     });
 
-    const jogos = response.data.response;
+    const jogosBrutos = response.data.response;
 
-    console.log(`Total de jogos encontrados em ${hoje}: ${jogos.length}`);
+    const jogosFormatados = jogosBrutos.map(jogo => {
+      return {
+        liga: jogo.league.name,
+        ligaLogo: jogo.league.logo,
+        pais: jogo.league.country,
+        horario: jogo.fixture.date,
+        escudoCasa: jogo.teams.home.logo,
+        escudoFora: jogo.teams.away.logo,
+        timeCasa: jogo.teams.home.name,
+        timeFora: jogo.teams.away.name,
+        palpites: gerarPalpitesAleatorios()
+      };
+    });
 
-    const resultados = [];
+    res.json(jogosFormatados);
 
-    for (const jogo of jogos) {
-      const { fixture, teams, league } = jogo;
-
-      const homeId = teams.home.id;
-      const awayId = teams.away.id;
-      const leagueId = league.id;
-
-      try {
-        const [homeStats, awayStats] = await Promise.all([
-          axios.get(`${API_URL}/teams/statistics`, {
-            params: { team: homeId, league: leagueId },
-            headers: { 'x-apisports-key': API_KEY }
-          }),
-          axios.get(`${API_URL}/teams/statistics`, {
-            params: { team: awayId, league: leagueId },
-            headers: { 'x-apisports-key': API_KEY }
-          })
-        ]);
-
-        const homeForm = homeStats.data.response.form || '';
-        const awayForm = awayStats.data.response.form || '';
-
-        const homeWins = (homeForm.match(/W/g) || []).length;
-        const awayLosses = (awayForm.match(/L/g) || []).length;
-
-        const palpites = [];
-
-        if (homeWins >= 3) palpites.push(`Vitória do ${teams.home.name}`);
-        if (awayLosses >= 3) palpites.push(`Derrota do ${teams.away.name}`);
-        if (homeWins === awayLosses && homeWins > 0) palpites.push('Empate provável');
-        if (palpites.length === 0) palpites.push('Palpite equilibrado');
-
-        resultados.push({
-          liga: league.name,
-          ligaLogo: league.logo,
-          timeCasa: teams.home.name,
-          escudoCasa: teams.home.logo,
-          timeFora: teams.away.name,
-          escudoFora: teams.away.logo,
-          horario: fixture.date,
-          palpites
-        });
-
-      } catch (erroPalpite) {
-        console.log(`Erro ao gerar palpite para ${teams.home.name} x ${teams.away.name}: ${erroPalpite.message}`);
-        resultados.push({
-          liga: league.name,
-          ligaLogo: league.logo,
-          timeCasa: teams.home.name,
-          escudoCasa: teams.home.logo,
-          timeFora: teams.away.name,
-          escudoFora: teams.away.logo,
-          horario: fixture.date,
-          palpites: ['Palpite indisponível']
-        });
-      }
-    }
-
-    res.json(resultados);
-  } catch (erro) {
-    console.error('Erro ao buscar jogos:', erro.message);
-    res.status(500).json({ erro: 'Erro ao buscar jogos do dia.' });
+  } catch (error) {
+    console.error("Erro ao buscar jogos:", error.message);
+    res.status(500).json({ erro: "Erro ao buscar jogos do dia." });
   }
+});
+
+function gerarPalpitesAleatorios() {
+  const opcoes = [
+    "Mais de 2.5 gols",
+    "Ambas marcam",
+    "Vitória do mandante",
+    "Vitória do visitante",
+    "Empate",
+    "Menos de 2.5 gols"
+  ];
+
+  // retorna 3 palpites aleatórios diferentes
+  const embaralhado = opcoes.sort(() => 0.5 - Math.random());
+  return embaralhado.slice(0, 3);
+}
+
+app.get("/", (req, res) => {
+  res.send("API do Palpite da Hora funcionando!");
 });
 
 app.listen(PORT, () => {
