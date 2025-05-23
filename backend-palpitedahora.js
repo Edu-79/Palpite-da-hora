@@ -1,4 +1,4 @@
-// BACKEND PALPITE DA HORA COM ANÁLISE AVANÇADA
+// BACKEND ATUALIZADO - PALPITES, HORÁRIOS E ESCUDOS
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
@@ -10,6 +10,7 @@ app.use(cors());
 
 const API_KEY = "92e0f4a7bea9a8f54c55e1353c9d53be";
 const BASE_URL = "https://v3.football.api-sports.io";
+const logoPadrao = "https://upload.wikimedia.org/wikipedia/commons/6/6e/Football_2.png";
 
 async function gerarPalpites(homeId, awayId, leagueId) {
   try {
@@ -60,7 +61,7 @@ async function gerarPalpites(homeId, awayId, leagueId) {
     }
 
     // Escanteios e Cartões (simulados por enquanto)
-    const escanteios = casa.offsides?.total || 4 + fora.offsides?.total || 4;
+    const escanteios = (casa.offsides?.total || 4) + (fora.offsides?.total || 4);
     const cartoes = (casa.cards.yellow.total || 2) + (fora.cards.yellow.total || 2);
     if (escanteios >= 8) {
       palpites.push("Mais de 8 escanteios");
@@ -71,7 +72,11 @@ async function gerarPalpites(homeId, awayId, leagueId) {
 
     return palpites.slice(0, 4);
   } catch (err) {
-    console.error("Erro ao gerar palpites:", err.message);
+    console.error("Erro ao gerar palpites:", {
+      message: err.message,
+      response: err.response?.data,
+      team: { homeId, awayId, leagueId }
+    });
     return ["Palpite indisponível"];
   }
 }
@@ -93,12 +98,13 @@ app.get("/jogos", async (req, res) => {
 
       return {
         liga: jogo.league.name,
-        ligaLogo: jogo.league.logo,
+        ligaLogo: jogo.league.logo || logoPadrao,
         timeCasa: jogo.teams.home.name,
-        escudoCasa: jogo.teams.home.logo,
+        escudoCasa: jogo.teams.home.logo || logoPadrao,
         timeFora: jogo.teams.away.name,
-        escudoFora: jogo.teams.away.logo,
-        horario: new Date(jogo.fixture.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        escudoFora: jogo.teams.away.logo || logoPadrao,
+        horario: new Date(new Date(jogo.fixture.date).getTime() - 3 * 60 * 60 * 1000)
+          .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         palpites
       };
     }));
