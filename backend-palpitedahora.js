@@ -11,13 +11,15 @@ const API_KEY = "92e0f4a7bea9a8f54c55e1353c9d53be";
 const BASE_URL = "https://v3.football.api-sports.io";
 const logoPadrao = "https://upload.wikimedia.org/wikipedia/commons/6/6e/Football_2.png";
 
+const anoAtual = new Date().getFullYear();
+
 async function gerarPalpites(homeId, awayId, leagueId) {
   try {
     const [homeStats, awayStats] = await Promise.all([
-      axios.get(`${BASE_URL}/teams/statistics?team=${homeId}&league=${leagueId}&season=2023`, {
+      axios.get(`${BASE_URL}/teams/statistics?team=${homeId}&league=${leagueId}&season=${anoAtual}`, {
         headers: { "x-apisports-key": API_KEY }
       }),
-      axios.get(`${BASE_URL}/teams/statistics?team=${awayId}&league=${leagueId}&season=2023`, {
+      axios.get(`${BASE_URL}/teams/statistics?team=${awayId}&league=${leagueId}&season=${anoAtual}`, {
         headers: { "x-apisports-key": API_KEY }
       })
     ]);
