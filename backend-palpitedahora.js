@@ -1,4 +1,4 @@
-// BACKEND COM SOFASCORE + LOG DE RESPOSTA PARA DEBUG
+// BACKEND COM FOOTBALL-DATA.ORG
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
@@ -8,44 +8,41 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors({ origin: "*" }));
 
-function timestampParaHoraBr(timestamp) {
-  const data = new Date(timestamp * 1000);
-  return data.toLocaleTimeString("pt-BR", {
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-}
+const API_KEY = "82b83859abf946758b0ebf4e6eeb5e0d";
+const BASE_URL = "https://api.football-data.org/v4";
+const logoPadrao = "https://upload.wikimedia.org/wikipedia/commons/6/6e/Football_2.png";
 
 app.get("/jogos", async (req, res) => {
   try {
-    const hoje = new Date().toISOString().slice(0, 10);
-    const url = `https://api.sofascore.com/api/v1/sport/football/scheduled-events/${hoje}`;
+    const hoje = new Date().toISOString().split("T")[0];
+    const response = await axios.get(`${BASE_URL}/matches?dateFrom=${hoje}&dateTo=${hoje}`, {
+      headers: { "X-Auth-Token": API_KEY }
+    });
 
-    const resposta = await axios.get(url);
-
-    console.log("Resposta bruta da SofaScore:", resposta.data);
-
-    const eventos = resposta.data.events || [];
-
-    const jogos = eventos.slice(0, 10).map(evento => ({
-      liga: evento.tournament.name,
-      ligaLogo: `https://api.sofascore.app/api/v1/unique-tournament/${evento.tournament.uniqueTournament.id}/image`,
-      timeCasa: evento.homeTeam.name,
-      escudoCasa: `https://api.sofascore.app/api/v1/team/${evento.homeTeam.id}/image`,
-      timeFora: evento.awayTeam.name,
-      escudoFora: `https://api.sofascore.app/api/v1/team/${evento.awayTeam.id}/image`,
-      horario: timestampParaHoraBr(evento.startTimestamp),
-      palpites: ["Jogo carregado via SofaScore"]
-    }));
+    const partidas = response.data.matches || [];
+    const jogos = partidas.slice(0, 10).map(jogo => {
+      return {
+        liga: jogo.competition.name,
+        ligaLogo: logoPadrao,
+        timeCasa: jogo.homeTeam.name,
+        escudoCasa: logoPadrao,
+        timeFora: jogo.awayTeam.name,
+        escudoFora: logoPadrao,
+        horario: new Date(jogo.utcDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        palpites: [
+          "Empate provável",
+          `Vitória de ${jogo.homeTeam.name}`,
+          `Menos de 2.5 gols`
+        ]
+      };
+    });
 
     res.json(jogos);
-  } catch (erro) {
-    console.error("Erro ao buscar dados do SofaScore:", erro.message);
-    if (erro.response) {
-      console.error("Detalhes do erro:", erro.response.data);
-    }
-    res.status(500).json({ erro: "Erro ao buscar jogos do SofaScore" });
+  } catch (err) {
+    console.error("Erro ao buscar dados do Football-Data.org:", err.message);
+    if (err.response) console.error("Detalhes:", err.response.data);
+    res.status(500).json({ erro: "Erro ao buscar jogos" });
   }
 });
 
-app.listen(PORT, () => console.log("Servidor com SofaScore ativo na porta " + PORT));
+app.listen(PORT, () => console.log("Servidor Football-Data rodando na porta " + PORT));
