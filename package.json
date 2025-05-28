@@ -1,14 +1,17 @@
 {
-  "name": "palpite-da-hora",
+  "name": "palpite-da-hora-backend",
   "version": "1.0.0",
-  "description": "Backend com geração de palpites via API-Football",
-  "main": "backend-palpitedahora.js",
+  "description": "Backend inteligente com IA para gerar palpites baseados em estatísticas",
+  "main": "index.js",
   "scripts": {
-    "start": "node backend-palpitedahora.js"
+    "start": "node index.js"
   },
   "dependencies": {
-    "axios": "^1.6.7",
+    "axios": "^1.6.8",
+    "cheerio": "^1.0.0-rc.12",
     "cors": "^2.8.5",
-    "express": "^4.18.2"
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "openai": "^4.26.0"
   }
 }
