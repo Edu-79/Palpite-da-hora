@@ -1,0 +1,26 @@
+# Ignorar variáveis de ambiente
+.env
+
+# Ignorar arquivos de log
+*.log
+
+# Ignorar diretórios de dependências
+node_modules/
+vendor/
+
+# Ignorar pastas temporárias
+tmp/
+temp/
+.cache/
+
+# Ignorar arquivos de sistema
+.DS_Store
+Thumbs.db
+
+# Ignorar configurações do editor
+.vscode/
+.idea/
+
+# Ignorar build e dist
+dist/
+build/
