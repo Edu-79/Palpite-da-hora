@@ -1,78 +1,83 @@
-// backend/index.js
-import express from 'express';
-import cors from 'cors';
-import axios from 'axios';
-import 'dotenv/config';
+// Arquivo: index.js
+require("dotenv").config();
+const express = require("express");
+const axios = require("axios");
+const OpenAI = require("openai");
+const cors = require("cors");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-
 app.use(cors());
 
-app.get('/jogos', async (req, res) => {
+const openai = new OpenAI({ apiKey: process.env.OPENAI_KEY });
+
+app.get("/jogos", async (req, res) => {
   try {
-    // Exemplo de scraping (simulado)
-    const dadosExemplo = [
+    const dataHoje = new Date().toISOString().split("T")[0];
+
+    const resposta = await axios.get(
+      `https://v3.football.api-sports.io/fixtures?date=${dataHoje}`,
       {
-        liga: 'Brasileirão Série A',
-        ligaLogo: 'https://media.api-sports.io/football/leagues/71.png',
-        timeCasa: 'Flamengo',
-        escudoCasa: 'https://media.api-sports.io/football/teams/131.png',
-        timeFora: 'Palmeiras',
-        escudoFora: 'https://media.api-sports.io/football/teams/126.png',
-        horario: '20:30',
-        estatisticas: {
-          vitoriasCasa: 10,
-          vitoriasFora: 6,
-          empates: 4,
-          mediaGols: 2.7,
-          escanteios: 10,
-          cartoes: 5
-        }
+        headers: {
+          "x-apisports-key": process.env.API_FOOTBALL_KEY,
+        },
       }
-    ];
+    );
 
-    const respostasComPalpites = await Promise.all(
-      dadosExemplo.map(async (jogo) => {
+    const partidas = resposta.data.response;
+
+    const jogos = await Promise.all(
+      partidas.map(async (partida) => {
+        const liga = partida.league.name;
+        const ligaLogo = partida.league.logo;
+        const timeCasa = partida.teams.home.name;
+        const timeFora = partida.teams.away.name;
+        const escudoCasa = partida.teams.home.logo;
+        const escudoFora = partida.teams.away.logo;
+
+        const horarioUTC = new Date(partida.fixture.date);
+        const horarioLocal = horarioUTC.toLocaleTimeString("pt-BR", {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+
+        let palpites = [];
+
         try {
-          const prompt = `Com base nestes dados: \nVitórias do time da casa: ${jogo.estatisticas.vitoriasCasa}\nVitórias do visitante: ${jogo.estatisticas.vitoriasFora}\nEmpates: ${jogo.estatisticas.empates}\nMédia de gols: ${jogo.estatisticas.mediaGols}\nEscanteios: ${jogo.estatisticas.escanteios}\nCartões: ${jogo.estatisticas.cartoes}\n\nCrie 3 palpites coerentes para este jogo (${jogo.timeCasa} x ${jogo.timeFora}). Evite contradições como empate e vitória. Seja claro.`;
+          const prompt = `Com base nos dados: \nTime da casa: ${timeCasa} \nTime visitante: ${timeFora} \nCampeonato: ${liga} \nData: ${dataHoje} \nGere até 3 palpites reais para esse jogo, considerando estatísticas típicas, como gols, escanteios, cartões, etc. Seja objetivo.`;
 
-          const resposta = await axios.post(
-            'https://api.openai.com/v1/chat/completions',
-            {
-              model: 'gpt-4',
-              messages: [
-                { role: 'system', content: 'Você é um especialista em previsões de futebol.' },
-                { role: 'user', content: prompt }
-              ]
-            },
-            {
-              headers: {
-                'Authorization': `Bearer ${OPENAI_API_KEY}`,
-                'Content-Type': 'application/json'
-              }
-            }
-          );
+          const respostaIA = await openai.chat.completions.create({
+            model: "gpt-3.5-turbo",
+            messages: [{ role: "user", content: prompt }],
+            max_tokens: 100,
+          });
 
-          const texto = resposta.data.choices[0].message.content;
-          const palpites = texto.split('\n').filter(p => p.trim() !== '');
-
-          return { ...jogo, palpites };
-        } catch (error) {
-          console.error('Erro ao gerar palpite para um jogo:', error.message);
-          return { ...jogo, palpites: ['Palpite indisponível'] };
+          const texto = respostaIA.choices[0].message.content;
+          palpites = texto.split("\n").filter((p) => p.trim() !== "");
+        } catch (erroIA) {
+          palpites = ["Palpite indisponível"];
         }
+
+        return {
+          liga,
+          ligaLogo,
+          timeCasa,
+          escudoCasa,
+          timeFora,
+          escudoFora,
+          horario: horarioLocal,
+          palpites,
+        };
       })
     );
 
-    res.json(respostasComPalpites);
+    res.json(jogos);
   } catch (erro) {
-    console.error('Erro geral ao buscar jogos:', erro.message);
-    res.status(500).json({ erro: 'Erro ao buscar jogos ou gerar palpites' });
+    console.error("Erro ao buscar jogos:", erro);
+    res.status(500).json({ erro: "Erro ao buscar jogos do API-Football." });
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
+const PORTA = process.env.PORT || 3000;
+app.listen(PORTA, () => {
+  console.log(`Servidor rodando na porta ${PORTA}`);
 });
