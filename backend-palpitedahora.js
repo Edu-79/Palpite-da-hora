@@ -1,97 +1,79 @@
-// index.js (Backend com validação da resposta da OpenAI e API-Football)
-
 const express = require("express");
 const axios = require("axios");
 const cors = require("cors");
-require("dotenv\config");
+require("dotenv").config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 
-const API_FOOTBALL_KEY = process.env.API_FOOTBALL_KEY;
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-
 app.get("/jogos", async (req, res) => {
   try {
-    const hoje = new Date().toISOString().split("T")[0];
-
-    // Buscar jogos do dia
-    const jogosResponse = await axios.get(
-      `https://v3.football.api-sports.io/fixtures?date=${hoje}`,
-      {
-        headers: {
-          "x-apisports-key": API_FOOTBALL_KEY,
-        },
+    const hoje = new Date().toISOString().split("T")[0]; // AAAA-MM-DD
+    const jogosResp = await axios.get(`https://v3.football.api-sports.io/fixtures?date=${hoje}`, {
+      headers: {
+        "x-apisports-key": process.env.API_FOOTBALL_KEY,
       }
-    );
+    });
 
-    const jogos = jogosResponse.data.response;
+    const jogos = jogosResp.data.response;
 
-    const resultados = await Promise.all(
-      jogos.map(async (jogo) => {
-        const home = jogo.teams.home;
-        const away = jogo.teams.away;
-        const league = jogo.league;
-        const horario = new Date(jogo.fixture.date).toLocaleTimeString("pt-BR", {
-          hour: "2-digit",
-          minute: "2-digit",
+    const jogosFormatados = await Promise.all(jogos.map(async (jogo) => {
+      const prompt = `Com base nas informações abaixo, gere 3 palpites coerentes de apostas para o jogo de hoje:
+Time da casa: ${jogo.teams.home.name}
+Time visitante: ${jogo.teams.away.name}
+Campeonato: ${jogo.league.name}
+Data: ${hoje}
+
+Responda em formato de lista:`;
+
+      try {
+        const respIA = await axios.post("https://api.openai.com/v1/chat/completions", {
+          model: "gpt-3.5-turbo",
+          messages: [{ role: "user", content: prompt }],
+          max_tokens: 100,
+        }, {
+          headers: {
+            Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+            "Content-Type": "application/json"
+          }
         });
 
-        let palpites = ["Palpite indisponível"];
-
-        try {
-          const prompt = `Baseado nas estatísticas de jogos entre ${home.name} e ${away.name}, gere até 3 palpites objetivos para apostas esportivas, como vencedor, ambos marcam, total de gols, escanteios ou cartões. Responda apenas com uma lista.`;
-
-          const openaiRes = await axios.post(
-            "https://api.openai.com/v1/chat/completions",
-            {
-              model: "gpt-3.5-turbo",
-              messages: [{ role: "user", content: prompt }],
-              temperature: 0.7,
-            },
-            {
-              headers: {
-                Authorization: `Bearer ${OPENAI_API_KEY}`,
-              },
-            }
-          );
-
-          const texto = openaiRes.data.choices[0]?.message?.content;
-
-          // Extrair linhas do texto (se vier em lista com marcadores ou numeros)
-          if (texto) {
-            palpites = texto
-              .split("\n")
-              .filter((line) => line.trim())
-              .map((line) => line.replace(/^[-\d\*\.]\s*/, "").trim())
-              .filter((line) => line.length > 4);
-          }
-        } catch (erroOpenAI) {
-          console.error("Erro na IA:", erroOpenAI.message);
-        }
+        const respostaIA = respIA.data.choices[0].message.content.trim().split("\n").map(p => p.replace(/^\d+[\.\)]\s*/, ""));
 
         return {
-          liga: league.name,
-          ligaLogo: league.logo,
-          timeCasa: home.name,
-          escudoCasa: home.logo,
-          timeFora: away.name,
-          escudoFora: away.logo,
-          horario,
-          palpites: palpites.length ? palpites : ["Palpite indisponível"],
+          liga: jogo.league.name,
+          ligaLogo: jogo.league.logo,
+          timeCasa: jogo.teams.home.name,
+          escudoCasa: jogo.teams.home.logo,
+          timeFora: jogo.teams.away.name,
+          escudoFora: jogo.teams.away.logo,
+          horario: jogo.fixture.date.slice(11, 16),
+          palpites: respostaIA
         };
-      })
-    );
+      } catch (erroIA) {
+        return {
+          liga: jogo.league.name,
+          ligaLogo: jogo.league.logo,
+          timeCasa: jogo.teams.home.name,
+          escudoCasa: jogo.teams.home.logo,
+          timeFora: jogo.teams.away.name,
+          escudoFora: jogo.teams.away.logo,
+          horario: jogo.fixture.date.slice(11, 16),
+          palpites: ["Palpite indisponível"]
+        };
+      }
+    }));
 
-    res.json(resultados);
+    res.json(jogosFormatados);
   } catch (erro) {
-    console.error("Erro geral:", erro.message);
-    res.status(500).json({ erro: "Erro ao buscar jogos ou gerar palpites" });
+    console.error("Erro ao buscar jogos:", erro.message);
+    res.status(500).send("Erro ao buscar os jogos.");
   }
 });
 
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
+      
