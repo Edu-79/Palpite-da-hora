@@ -1,79 +1,67 @@
-const express = require("express");
-const axios = require("axios");
-const cors = require("cors");
-require("dotenv").config();
+// index.js
+const express = require('express');
+const fetch = require('node-fetch');
+const cors = require('cors');
+const { Configuration, OpenAIApi } = require("openai");
+require('dotenv').config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-
 app.use(cors());
 
-app.get("/jogos", async (req, res) => {
+const PORT = process.env.PORT || 3000;
+
+const configuration = new Configuration({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+const openai = new OpenAIApi(configuration);
+
+app.get('/jogos', async (req, res) => {
   try {
-    const hoje = new Date().toISOString().split("T")[0]; // AAAA-MM-DD
-    const jogosResp = await axios.get(`https://v3.football.api-sports.io/fixtures?date=${hoje}`, {
-      headers: {
-        "x-apisports-key": process.env.API_FOOTBALL_KEY,
-      }
+    const hoje = new Date().toISOString().split('T')[0];
+    const resposta = await fetch(`https://v3.football.api-sports.io/fixtures?date=${hoje}`, {
+      headers: { 'x-apisports-key': process.env.FOOTBALL_API_KEY }
     });
+    const json = await resposta.json();
 
-    const jogos = jogosResp.data.response;
+    const partidas = json.response;
 
-    const jogosFormatados = await Promise.all(jogos.map(async (jogo) => {
-      const prompt = `Com base nas informações abaixo, gere 3 palpites coerentes de apostas para o jogo de hoje:
-Time da casa: ${jogo.teams.home.name}
-Time visitante: ${jogo.teams.away.name}
-Campeonato: ${jogo.league.name}
-Data: ${hoje}
+    const jogosProcessados = await Promise.all(partidas.map(async partida => {
+      const prompt = `Com base nas estatísticas de um jogo entre ${partida.teams.home.name} e ${partida.teams.away.name}, gere 3 palpites prováveis de resultado (sem repetir ou contradizer).`;
 
-Responda em formato de lista:`;
-
+      let palpites = ["Palpite indisponível"];
       try {
-        const respIA = await axios.post("https://api.openai.com/v1/chat/completions", {
-          model: "gpt-3.5-turbo",
-          messages: [{ role: "user", content: prompt }],
-          max_tokens: 100,
-        }, {
-          headers: {
-            Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-            "Content-Type": "application/json"
-          }
+        const ia = await openai.createChatCompletion({
+          model: "gpt-4",
+          messages: [
+            { role: "system", content: "Você é um especialista em análise estatística esportiva." },
+            { role: "user", content: prompt }
+          ]
         });
-
-        const respostaIA = respIA.data.choices[0].message.content.trim().split("\n").map(p => p.replace(/^\d+[\.\)]\s*/, ""));
-
-        return {
-          liga: jogo.league.name,
-          ligaLogo: jogo.league.logo,
-          timeCasa: jogo.teams.home.name,
-          escudoCasa: jogo.teams.home.logo,
-          timeFora: jogo.teams.away.name,
-          escudoFora: jogo.teams.away.logo,
-          horario: jogo.fixture.date.slice(11, 16),
-          palpites: respostaIA
-        };
-      } catch (erroIA) {
-        return {
-          liga: jogo.league.name,
-          ligaLogo: jogo.league.logo,
-          timeCasa: jogo.teams.home.name,
-          escudoCasa: jogo.teams.home.logo,
-          timeFora: jogo.teams.away.name,
-          escudoFora: jogo.teams.away.logo,
-          horario: jogo.fixture.date.slice(11, 16),
-          palpites: ["Palpite indisponível"]
-        };
+        const texto = ia.data.choices[0].message.content.trim();
+        palpites = texto.split('\n').filter(p => p);
+      } catch (err) {
+        console.error("Erro com a OpenAI:", err.message);
       }
+
+      return {
+        liga: partida.league.name,
+        ligaLogo: partida.league.logo,
+        timeCasa: partida.teams.home.name,
+        escudoCasa: partida.teams.home.logo,
+        timeFora: partida.teams.away.name,
+        escudoFora: partida.teams.away.logo,
+        horario: new Date(partida.fixture.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        palpites
+      };
     }));
 
-    res.json(jogosFormatados);
-  } catch (erro) {
-    console.error("Erro ao buscar jogos:", erro.message);
-    res.status(500).send("Erro ao buscar os jogos.");
+    res.json(jogosProcessados);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: "Erro ao buscar jogos ou gerar palpites." });
   }
 });
 
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
-      
