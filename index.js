@@ -1,58 +1,64 @@
+import express from 'express';
+import fetch from 'node-fetch';
+import dotenv from 'dotenv';
+import cors from 'cors';
+import { Configuration, OpenAIApi } from 'openai';
 
-require('dotenv').config();
-const express = require('express');
-const axios = require('axios');
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-app.use(express.json());
+app.use(cors());
 
-app.get('/palpites', async (req, res) => {
-    try {
-        const openaiResponse = await axios.post('https://api.openai.com/v1/chat/completions', {
-            model: "gpt-4o",
-            messages: [
-                {
-                    role: "user",
-                    content: \`
-Você é um especialista em futebol e estatísticas esportivas. Liste todos os jogos de futebol que acontecem hoje, incluindo os principais campeonatos do mundo e as Séries A, B e C do Campeonato Brasileiro. Separe os jogos por campeonato. Para cada jogo, inclua:
-- Nome dos times
-- Horário
-- Breve análise estatística baseada em dados recentes
-- No mínimo 3 palpites (resultado, gols, escanteios, etc), sempre baseados em estatísticas reais e evitando contradições.
+const openai = new OpenAIApi(new Configuration({
+  apiKey: process.env.OPENAI_API_KEY,
+}));
 
-Responda no seguinte formato JSON:
-[
-  {
-    "campeonato": "Nome do Campeonato",
-    "jogos": [
-      {
-        "partida": "Time X vs Time Y",
-        "horario": "Horário",
-        "analise": "Resumo estatístico",
-        "palpites": ["Palpite 1", "Palpite 2", "Palpite 3"]
-      }
-    ]
-  }
-]
-\`
-                }
-            ],
-            temperature: 0.7
-        }, {
-            headers: {
-                'Authorization': \`Bearer \${process.env.OPENAI_API_KEY}\`,
-                'Content-Type': 'application/json'
-            }
+app.get('/jogos', async (req, res) => {
+  try {
+    const response = await fetch('https://v3.football.api-sports.io/fixtures?date=' + new Date().toISOString().split('T')[0], {
+      headers: { 'x-apisports-key': process.env.API_FOOTBALL_KEY }
+    });
+    const data = await response.json();
+    const jogos = [];
+
+    for (const item of data.response) {
+      const timeCasa = item.teams.home.name;
+      const timeFora = item.teams.away.name;
+      const escudoCasa = item.teams.home.logo;
+      const escudoFora = item.teams.away.logo;
+      const horario = item.fixture.date.substring(11, 16);
+      const liga = item.league.name;
+      const ligaLogo = item.league.logo;
+
+      const prompt = `Baseado nas estatísticas históricas e desempenho recente, me dê 3 palpites realistas e não contraditórios para o jogo de futebol entre ${timeCasa} x ${timeFora} de hoje (${liga}). Seja objetivo nos palpites, pode sugerir: resultado, total de gols, escanteios ou cartões.`;
+
+      let palpites = [];
+
+      try {
+        const aiResponse = await openai.createChatCompletion({
+          model: "gpt-4o",
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.7,
         });
 
-        res.json(openaiResponse.data.choices[0].message.content);
-    } catch (error) {
-        console.error(error);
-        res.status(500).send('Erro ao buscar palpites.');
+        const texto = aiResponse.data.choices[0].message.content;
+        palpites = texto.split('\n').filter(p => p.trim() !== '');
+      } catch (error) {
+        console.log('Erro ao consultar a OpenAI:', error.message);
+        palpites = ['Palpite indisponível'];
+      }
+
+      jogos.push({ liga, ligaLogo, timeCasa, escudoCasa, timeFora, escudoFora, horario, palpites });
     }
+
+    res.json(jogos);
+  } catch (error) {
+    console.error('Erro ao buscar jogos:', error.message);
+    res.status(500).json({ error: 'Erro ao buscar os jogos' });
+  }
 });
 
 app.listen(PORT, () => {
-    console.log(\`Servidor rodando na porta \${PORT}\`);
+  console.log(`Servidor rodando na porta ${PORT}`);
 });
