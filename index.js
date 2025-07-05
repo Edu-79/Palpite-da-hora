@@ -1,53 +1,55 @@
-const express = require("express");
-const cors = require("cors");
-const path = require("path");
-const { Configuration, OpenAIApi } = require("openai");
-require("dotenv").config();
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import axios from 'axios';
+import cheerio from 'cheerio';
+import OpenAI from 'openai';
 
+dotenv.config();
 const app = express();
-const PORT = process.env.PORT || 3000;
 app.use(cors());
-app.use(express.static(path.join(__dirname, "public")));
 
-const configuration = new Configuration({
+const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
-const openai = new OpenAIApi(configuration);
 
-app.get("/jogos", async (req, res) => {
-  const jogos = [
-    { campeonato: "Série B", data: "05/07/2025", time_casa: "Remo", time_fora: "Cuiabá" },
-    { campeonato: "Série B", data: "05/07/2025", time_casa: "CRB", time_fora: "Santos" },
-    { campeonato: "Série B", data: "05/07/2025", time_casa: "Amazonas", time_fora: "Chapecoense" }
-  ];
-
+app.get('/jogos', async (req, res) => {
   try {
-    const respostas = await Promise.all(jogos.map(async (jogo) => {
-      const prompt = `Gere 3 palpites objetivos e curtos baseados em estatísticas para o jogo ${jogo.time_casa} x ${jogo.time_fora}, incluindo possibilidade de vitória, ambas marcam, gols, escanteios ou cartões, sem contradições.`;
-      const completion = await openai.createChatCompletion({
-        model: "gpt-4",
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.7,
+    const { data } = await axios.get('https://www.sofascore.com/pt/football/livescore');
+    const $ = cheerio.load(data);
+
+    const jogos = [];
+
+    $('a').each((i, el) => {
+      const texto = $(el).text().trim();
+      const partes = texto.split('\n');
+      if (partes.length >= 2 && partes[0].includes(' - ')) {
+        const [timeA, timeB] = partes[0].split(' - ');
+        jogos.push({ timeA, timeB });
+      }
+    });
+
+    const jogosComPalpite = [];
+
+    for (const jogo of jogos.slice(0, 10)) {
+      const prompt = `Com base em dados estatísticos, desempenho recente e estilo de jogo, gere 3 palpites realistas para o confronto entre ${jogo.timeA} e ${jogo.timeB}. Formato curto e direto, sem contradições.`;
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4',
+        messages: [{ role: 'user', content: prompt }],
       });
+      jogosComPalpite.push({
+        ...jogo,
+        palpites: response.choices[0].message.content.trim().split('\n'),
+      });
+    }
 
-      const palpites = completion.data.choices[0].message.content
-        .split("
-")
-        .filter(p => p.trim() !== "")
-        .map(p => p.replace(/^- /, "").trim());
-
-      return { ...jogo, palpites };
-    }));
-
-    res.json(respostas);
+    res.json(jogosComPalpite);
   } catch (error) {
-    console.error(error.message);
-    res.status(500).json({ error: "Erro ao gerar palpites." });
+    res.status(500).json({ erro: 'Falha ao gerar palpites.' });
   }
 });
 
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "public/index.html"));
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Servidor rodando na porta ${PORT}`);
 });
-
-app.listen(PORT, () => console.log(`Servidor no ar: http://localhost:${PORT}`));
