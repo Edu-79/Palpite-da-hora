@@ -1,15 +1,15 @@
-
 {
-  "name": "palpite-da-hora-backend",
+  "name": "palpite-do-edu",
   "version": "1.0.0",
-  "description": "Backend do app Palpite da Hora 100% OpenAI",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "axios": "^1.4.0",
-    "dotenv": "^16.0.0",
-    "express": "^4.18.2"
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "openai": "^4.20.0"
   }
 }
